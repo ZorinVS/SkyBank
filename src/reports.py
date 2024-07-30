@@ -1,4 +1,3 @@
-
 import functools
 import logging
 from datetime import datetime, timedelta
@@ -10,7 +9,9 @@ import pandas as pd
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
-def report_decorator(file_name: Optional[str] = None) -> Callable[[Callable[..., str]], Callable[..., str]]:
+def report_decorator(
+    file_name: Optional[str] = None,
+) -> Callable[[Callable[..., pd.DataFrame]], Callable[..., pd.DataFrame]]:
     """
     Декоратор для записи результата функции-отчета в файл.
 
@@ -18,16 +19,20 @@ def report_decorator(file_name: Optional[str] = None) -> Callable[[Callable[...,
     :return: Декоратор для функции, формирующей отчет.
     """
 
-    def decorator(func: Callable[..., str]) -> Callable[..., str]:
+    def decorator(func: Callable[..., pd.DataFrame]) -> Callable[..., pd.DataFrame]:
         @functools.wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> str:
+        def wrapper(*args: Any, **kwargs: Any) -> pd.DataFrame:
             result = func(*args, **kwargs)
             if file_name:
                 output_file = file_name
             else:
                 output_file = f'report_{datetime.now().strftime("%Y%m%d_%H%M%S")}.txt'
+
+            # Преобразование DataFrame в строку
+            result_str = result.to_string(index=False)
+
             with open(output_file, "w", encoding="utf-8") as file:
-                file.write(result)
+                file.write(result_str)
             return result
 
         return wrapper
@@ -35,17 +40,20 @@ def report_decorator(file_name: Optional[str] = None) -> Callable[[Callable[...,
     return decorator
 
 
-def category_expenses(transactions: pd.DataFrame, category: str, date: Optional[Union[str, datetime]] = None) -> float:
+@report_decorator()
+def spending_by_category(
+    transactions: pd.DataFrame, category: str, date: Optional[Union[str, datetime]] = None
+) -> pd.DataFrame:
     """
-    Рассчитывает траты по заданной категории за последние три месяца от переданной даты.
+    Возвращает траты по заданной категории за последние три месяца от переданной даты.
 
     :param transactions: DataFrame с транзакциями, содержащий колонки 'Дата операции', 'Сумма операции', 'Категория'.
     :param category: Название категории для расчета трат.
-    :param date: Опциональная дата в формате 'YYYY-MM-DD'. Если не передана, берется текущая дата.
-    :return: Сумма трат по заданной категории за последние три месяца.
-    :raises ValueError: Если входные данные некорректны.
+    :param date: Опциональная дата в формате 'YYYY-MM-DD' или 'YYYY-MM-DD HH:MM:SS'.
+    Если не передана, берется текущая дата.
+    :return: DataFrame с транзакциями по заданной категории за последние три месяца.
     """
-    logging.info("Начало выполнения функции category_expenses")
+    logging.info("Начало выполнения функции spending_by_category")
 
     # Валидация входных данных
     if not isinstance(transactions, pd.DataFrame):
@@ -54,18 +62,23 @@ def category_expenses(transactions: pd.DataFrame, category: str, date: Optional[
     if not isinstance(category, str):
         logging.error("Тип аргумента category должен быть string")
         raise ValueError("Тип аргумента category должен быть string")
+
+    # Преобразование строки даты в объект datetime
     if date is not None:
         if isinstance(date, str):
             try:
-                date = datetime.strptime(date, "%Y-%m-%d")
+                # Попытка распарсить дату с временем и без времени
+                date = datetime.strptime(date, "%Y-%m-%d %H:%M:%S")
             except ValueError:
-                logging.error("date должен быть в формате 'YYYY-MM-DD'")
-                raise ValueError("date должен быть в формате 'YYYY-MM-DD'")
+                try:
+                    date = datetime.strptime(date, "%Y-%m-%d")
+                except ValueError:
+                    logging.error("date должен быть в формате 'YYYY-MM-DD' или 'YYYY-MM-DD HH:MM:SS'")
+                    raise ValueError("date должен быть в формате 'YYYY-MM-DD' или 'YYYY-MM-DD HH:MM:SS'")
         elif not isinstance(date, datetime):
             logging.error("date должен быть объектом datetime")
             raise ValueError("date должен быть объектом datetime")
     else:
-        # Получение текущей даты
         date = datetime.today()
 
     logging.info("Используемая дата: %s", date)
@@ -86,9 +99,5 @@ def category_expenses(transactions: pd.DataFrame, category: str, date: Optional[
 
     logging.info("Количество транзакций в категории '%s' за последние три месяца: %d", category, len(filtered_by_date))
 
-    # Подсчет трат по категории
-    total_expenses = filtered_by_date["Сумма операции"].sum()
-
-    logging.info("Общие расходы по категории '%s' за последние три месяца: %.2f", category, total_expenses)
-
-    return float(total_expenses)
+    # Возвращение DataFrame с транзакциями по категории за последние три месяца
+    return filtered_by_date

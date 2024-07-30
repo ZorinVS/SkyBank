@@ -1,16 +1,10 @@
 import logging
 
-from src.services import (
-    API_KEY_CURRENCY,
-    API_KEY_STOCK,
-    calculate_card_info,
-    fetch_currency_rates,
-    fetch_stock_prices,
-    filter_transactions_by_date,
-    get_top_5_transactions,
-    load_transactions,
-)
-from src.utils import generate_greeting, load_and_extract_user_settings
+from src.reports import spending_by_category
+from src.services import dataframe_to_dict_with_str, search_transactions
+from src.utils import (API_KEY_CURRENCY, API_KEY_STOCK, calculate_card_info, fetch_currency_rates, fetch_stock_prices,
+                       filter_transactions_by_date, generate_greeting, get_top_5_transactions,
+                       load_and_extract_user_settings, load_transactions)
 from src.views import form_json_response
 
 # Настройка логирования
@@ -22,6 +16,8 @@ if API_KEY_STOCK is None:
     raise ValueError("API_KEY_STOCK не найден в окружении")
 
 if __name__ == "__main__":
+    # ========================= Веб страницы ============================================
+    print("====== Веб страницы ======", "\n")
     # Заданные значения для выполнения функций
     date_time_str = "2020-04-27 19:30:30"
     file_path_transactions = "data/operations.xlsx"
@@ -57,3 +53,16 @@ if __name__ == "__main__":
 
     # Печать JSON-ответа
     print(json_response)
+
+    # =========================== Сервисы ==============================================
+    print("\n\n", "====== Сервисы ======", "\n")
+    # Получение транзакций в виде словаря
+    transactions_dict = dataframe_to_dict_with_str(all_transactions)
+
+    # Запуск простого поиска и печать JSON-ответа
+    print(search_transactions(transactions_dict, "Ozon.ru"))
+
+    # =========================== Отчеты ==============================================
+    print("\n\n", "====== Отчеты ======", "\n")
+    # Выводим траты по заданной категории за последние три месяца (от переданной даты)
+    print(spending_by_category(all_transactions, "Супермаркеты", date_time_str))
