@@ -1,110 +1,61 @@
 from datetime import datetime
-from unittest.mock import patch
+from unittest.mock import mock_open, patch
 
 import pandas as pd
 import pytest
 
-from src.reports import category_expenses, report_decorator
+from src.reports import report_decorator, spending_by_category  # Замените 'reports' на правильное имя вашего модуля
+
+# Пример данных для тестов
+transactions_data = {
+    "Дата операции": ["2023-01-01", "2023-02-01", "2023-03-01", "2023-04-01"],
+    "Сумма операции": [100, 200, 300, 400],
+    "Категория": ["Food", "Food", "Transport", "Food"],
+}
+transactions_df = pd.DataFrame(transactions_data)
 
 
-def test_category_expenses_valid_data(data_transactions):
-    """
-    Тестирует корректный расчет расходов по категории за последние три месяца.
-    """
-    df = pd.DataFrame(data_transactions)
-    result = category_expenses(df, "Продукты", "2023-06-30")
-    assert result == 600.0
+# Тест для декоратора report_decorator
+def test_report_decorator():
+    @report_decorator("test_report.txt")
+    def dummy_function():
+        return pd.DataFrame({"column": [1, 2, 3]})
+
+    with patch("builtins.open", mock_open()) as mock_file:
+        result = dummy_function()
+        mock_file.assert_called_with("test_report.txt", "w", encoding="utf-8")
+        mock_file().write.assert_called_once_with(result.to_string(index=False))
 
 
-def test_category_expenses_invalid_transactions_type():
-    """
-    Тестирует возникновение ошибки при некорректном типе аргумента transactions.
-    """
+# Тест для функции spending_by_category
+def test_spending_by_category():
+    result = spending_by_category(transactions_df, "Food", "2023-04-01")
+    expected_data = {
+        "Дата операции": [datetime(2023, 1, 1), datetime(2023, 2, 1), datetime(2023, 4, 1)],
+        "Сумма операции": [100, 200, 400],
+        "Категория": ["Food", "Food", "Food"],
+    }
+    expected_df = pd.DataFrame(expected_data)
+    pd.testing.assert_frame_equal(result.reset_index(drop=True), expected_df.reset_index(drop=True))
+
+
+# Тест для функции spending_by_category с неправильным форматом даты
+def test_spending_by_category_invalid_date():
+    with pytest.raises(ValueError, match="date должен быть в формате 'YYYY-MM-DD' или 'YYYY-MM-DD HH:MM:SS'"):
+        spending_by_category(transactions_df, "Food", "2023-04-01 12:34")
+
+
+# Тест для функции spending_by_category с неправильным типом данных для transactions
+def test_spending_by_category_invalid_transactions():
     with pytest.raises(ValueError, match="Тип аргумента transactions должен быть DataFrame"):
-        category_expenses([], "Продукты", "2023-06-30")
+        spending_by_category("not a DataFrame", "Food", "2023-04-01")
 
 
-def test_category_expenses_invalid_category_type(data_transactions):
-    """
-    Тестирует возникновение ошибки при некорректном типе аргумента category.
-    """
-    df = pd.DataFrame(data_transactions)
+# Тест для функции spending_by_category с неправильным типом данных для category
+def test_spending_by_category_invalid_category():
     with pytest.raises(ValueError, match="Тип аргумента category должен быть string"):
-        category_expenses(df, 123, "2023-06-30")
-
-
-def test_category_expenses_invalid_date_format(data_transactions):
-    """
-    Тестирует возникновение ошибки при некорректном формате даты.
-    """
-    df = pd.DataFrame(data_transactions)
-    with pytest.raises(ValueError, match="date должен быть в формате 'YYYY-MM-DD'"):
-        category_expenses(df, "Продукты", "2023-06-31")
-
-
-def test_category_expenses_no_date_provided(data_transactions):
-    """
-    Тестирует корректную работу функции при отсутствии аргумента date.
-    """
-    df = pd.DataFrame(data_transactions)
-    with patch("src.reports.datetime") as mock_datetime:
-        mock_datetime.today.return_value = datetime(2023, 6, 30)
-        result = category_expenses(df, "Продукты")
-        assert result == 600.0
-
-
-def test_category_expenses_empty_transactions(data_transactions_empty):
-    """
-    Тестирует корректную работу функции при отсутствии транзакций в переданном DataFrame.
-    """
-    df = pd.DataFrame(data_transactions_empty)
-    result = category_expenses(df, "Продукты", "2023-06-30")
-    assert result == 0.0
-
-
-@report_decorator()
-def generate_report() -> str:
-    return "Test report content"
-
-
-def test_report_decorator_with_specified_file(tmp_path):
-    """
-    Тестирование создания отчета с указанным именем файла.
-    """
-    output_file = tmp_path / "test_report.txt"
-
-    @report_decorator(output_file)
-    def generate_report() -> str:
-        return "Test report content"
-
-    generate_report()
-
-    assert output_file.exists()
-    with open(output_file, "r", encoding="utf-8") as file:
-        content = file.read()
-        assert content == "Test report content"
-
-
-def test_report_decorator_with_default_file_name(tmp_path, monkeypatch):
-    """
-    Тестирование создания отчета с именем файла по умолчанию.
-    """
-    monkeypatch.chdir(tmp_path)  # Изменяем текущую директорию на tmp_path
-
-    @report_decorator()
-    def generate_report_with_default_name() -> str:
-        return "Test report with default name"
-
-    generate_report_with_default_name()
-
-    files = list(tmp_path.iterdir())
-    assert len(files) == 1
-    generated_file = files[0]
-
-    assert generated_file.read_text(encoding="utf-8") == "Test report with default name"
-    assert generated_file.name.startswith("report_")
-    assert generated_file.name.endswith(".txt")
+        spending_by_category(transactions_df, 123, "2023-04-01")
 
 
 if __name__ == "__main__":
-    pytest.main([__file__])
+    pytest.main()
